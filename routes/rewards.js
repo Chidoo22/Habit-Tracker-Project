@@ -1,35 +1,42 @@
 const express = require('express');
 const authMiddleware = require('../middleware/auth');
-const { createReward, getRewardsByUser, redeemReward } = require('../models/rewards');
+const {
+    getStreak,
+    incrementStreak,
+    resetStreak
+} = require('../models/streaks');
 
 const router = express.Router();
 
+
 router.get('/', authMiddleware, async (req, res) => {
     try {
-        const rewards = await getRewardsByUser(req.user.id);
-        res.json(rewards);
+        const streak = await getStreak(req.user.id);
+        res.json(streak);
     } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+        console.error("Error getting streak:", error);
+        res.status(500).json({ message: 'Server error while fetching streak' });
     }
 });
 
-router.post('/', authMiddleware, async (req, res) => {
-    const { title, pointsRequired } = req.body;
+router.post('/increment', authMiddleware, async (req, res) => {
     try {
-        const reward = await createReward(req.user.id, title, pointsRequired);
-        res.status(201).json(reward);
+        const updatedStreak = await incrementStreak(req.user.id);
+        res.json(updatedStreak);
     } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+        console.error("Error incrementing streak:", error);
+        res.status(500).json({ message: 'Server error while incrementing streak' });
     }
 });
 
 
-router.post('/redeem/:id', authMiddleware, async (req, res) => {
+router.post('/reset', authMiddleware, async (req, res) => {
     try {
-        const response = await redeemReward(req.user.id, req.params.id);
-        res.json(response);
+        const reset = await resetStreak(req.user.id);
+        res.json(reset);
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        console.error("Error resetting streak:", error);
+        res.status(500).json({ message: 'Server error while resetting streak' });
     }
 });
 
