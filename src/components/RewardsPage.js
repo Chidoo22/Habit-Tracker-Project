@@ -36,42 +36,143 @@ const RewardsPage = () => {
     const [showAddForm, setShowAddForm] = useState(false);
     const [points, setPoints] = useState(150); // This would come from your global state
 
-    const handlePurchase = (rewardId) => {
+    // ✅ Fetch rewards from backend on load
+    useEffect(() => {
+        const fetchRewards = async () => {
+            try {
+                const response = await fetch('/api/rewards', {
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                const data = await response.json();
+                console.log("📦 Reward fetch response data:", data); // ✅ ADD THIS
+
+                if (!Array.isArray(data)) {
+                    console.error("Expected an array but got:", data);
+                    return;
+                }
+
+                setRewards(data.map(r => ({
+                    id: r.id,
+                    name: r.title,
+                    price: r.points_required,
+                    image: '',
+                    purchased: false
+                })));
+            } catch (error) {
+                console.error("❌ Failed to fetch rewards", error);
+            }
+        };
+
+        fetchRewards();
+    }, []);
+
+
+    const handlePurchase = async (rewardId) => {
         const reward = rewards.find(r => r.id === rewardId);
-        if (points >= reward.price) {
+
+        if (points < reward.price) {
+            alert("You don't have enough points for this reward!");
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/rewards/redeem/${rewardId}`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("Redeem failed:", errorData);
+                alert(errorData.message || "Failed to redeem reward.");
+                return;
+            }
+
+            // Successful redemption
             setPoints(points - reward.price);
             setRewards(rewards.map(r =>
-                r.id === rewardId ? {...r, purchased: true} : r
+                r.id === rewardId ? { ...r, purchased: true } : r
             ));
-        } else {
-            alert("You don't have enough points for this reward!");
+        } catch (error) {
+            console.error("Error redeeming reward:", error);
+            alert("An error occurred while redeeming the reward.");
         }
     };
 
-    const handleAddReward = () => {
-        if (newReward.name && newReward.price && newReward.image) {
-            const reward = {
-                id: rewards.length + 1,
-                name: newReward.name,
-                price: parseInt(newReward.price),
-                image: newReward.image,
-                purchased: false
-            };
-            setRewards([...rewards, reward]);
-            setNewReward({ name: '', price: '', image: '' });
-            setShowAddForm(false);
-        }
-    };
-
-    const handleDeleteReward = (rewardId) => {
-        if (window.confirm("Are you sure you want to delete this reward?")) {
-            setRewards(rewards.filter(reward => reward.id !== rewardId));
-        }
-    };
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setNewReward({...newReward, [name]: value});
+        setNewReward({ ...newReward, [name]: value });
+    };
+
+    const handleAddReward = async () => {
+        console.log("Save Reward clicked", newReward); // Debugging line
+
+        if (!newReward.name || !newReward.price) {
+            alert("Please enter both a name and price for the reward.");
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/rewards', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    title: newReward.name,
+                    pointsRequired: parseInt(newReward.price)  // <- ✅ Match your backend naming
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("Failed to save reward:", errorData);
+                alert("Failed to save reward.");
+                return;
+            }
+
+            const data = await response.json();
+            console.log("New reward saved:", data); // Debugging line
+
+            setRewards([...rewards, {
+                id: data.id,
+                name: data.title,
+                price: data.points_required,
+                image: newReward.image,
+                purchased: false
+            }]);
+
+            setNewReward({ name: '', price: '', image: '' });
+            setShowAddForm(false);
+        } catch (error) {
+            console.error("Error adding reward:", error);
+            alert("An error occurred while saving the reward.");
+        }
+    };
+
+
+    // ✅ Delete reward from backend
+    const handleDeleteReward = async (rewardId) => {
+        if (window.confirm("Are you sure you want to delete this reward?")) {
+            try {
+                await fetch(`/api/rewards/${rewardId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                setRewards(rewards.filter(reward => reward.id !== rewardId));
+            } catch (error) {
+                console.error("Error deleting reward:", error);
+            }
+        }
     };
 
     return (
@@ -133,7 +234,7 @@ const RewardsPage = () => {
                     {rewards.map(reward => (
                         <div key={reward.id} className={`reward-card ${reward.purchased ? 'purchased' : ''}`}>
                             <div className="reward-image">
-                                <img src={reward.image} alt={reward.name} />
+                                <img src={reward.image || 'https://via.placeholder.com/150'} alt={reward.name} />
                                 <button
                                     className="delete-reward-btn"
                                     onClick={() => handleDeleteReward(reward.id)}
